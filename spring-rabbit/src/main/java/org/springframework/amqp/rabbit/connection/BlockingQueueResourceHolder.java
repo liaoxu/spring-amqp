@@ -3,9 +3,8 @@ package org.springframework.amqp.rabbit.connection;
 /**
  * 
  * @author liaoxu
- *
+ * 
  */
-public class BlockingQueueResourceHolder
-{
+public class BlockingQueueResourceHolder {
 
 }

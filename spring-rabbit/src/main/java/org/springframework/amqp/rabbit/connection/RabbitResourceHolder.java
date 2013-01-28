@@ -32,23 +32,26 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
 import com.rabbitmq.client.Channel;
+
 /**
- * Rabbit resource holder, wrapping a RabbitMQ Connection and Channel. RabbitTransactionManager binds instances of this
- * class to the thread, for a given Rabbit ConnectionFactory.
- *
+ * Rabbit resource holder, wrapping a RabbitMQ Connection and Channel.
+ * RabbitTransactionManager binds instances of this class to the thread, for a
+ * given Rabbit ConnectionFactory.
+ * 
  * <p>
  * Note: This is an SPI class, not intended to be used by applications.
- *
+ * 
  * @author Mark Fisher
  * @author Dave Syer
  * @author Gary Russell
- *
+ * 
  * @see RabbitTransactionManager
  * @see RabbitTemplate
  */
 public class RabbitResourceHolder extends ResourceHolderSupport {
 
-	private static final Log logger = LogFactory.getLog(RabbitResourceHolder.class);
+	private static final Log logger = LogFactory
+			.getLog(RabbitResourceHolder.class);
 
 	private boolean frozen = false;
 
@@ -71,7 +74,8 @@ public class RabbitResourceHolder extends ResourceHolderSupport {
 	}
 
 	/**
-	 * @param channel a channel to add
+	 * @param channel
+	 *            a channel to add
 	 */
 	public RabbitResourceHolder(Channel channel, boolean releaseAfterCompletion) {
 		this();
@@ -85,15 +89,16 @@ public class RabbitResourceHolder extends ResourceHolderSupport {
 
 	/**
 	 * Whether the resources should be released after transaction completion.
-	 * Default true. Listener containers set to false because the listener continues
-	 * to use the channel.
+	 * Default true. Listener containers set to false because the listener
+	 * continues to use the channel.
 	 */
 	public boolean isReleaseAfterCompletion() {
 		return releaseAfterCompletion;
 	}
 
 	public final void addConnection(Connection connection) {
-		Assert.isTrue(!this.frozen, "Cannot add Connection because RabbitResourceHolder is frozen");
+		Assert.isTrue(!this.frozen,
+				"Cannot add Connection because RabbitResourceHolder is frozen");
 		Assert.notNull(connection, "Connection must not be null");
 		if (!this.connections.contains(connection)) {
 			this.connections.add(connection);
@@ -105,12 +110,14 @@ public class RabbitResourceHolder extends ResourceHolderSupport {
 	}
 
 	public final void addChannel(Channel channel, Connection connection) {
-		Assert.isTrue(!this.frozen, "Cannot add Channel because RabbitResourceHolder is frozen");
+		Assert.isTrue(!this.frozen,
+				"Cannot add Channel because RabbitResourceHolder is frozen");
 		Assert.notNull(channel, "Channel must not be null");
 		if (!this.channels.contains(channel)) {
 			this.channels.add(channel);
 			if (connection != null) {
-				List<Channel> channels = this.channelsPerConnection.get(connection);
+				List<Channel> channels = this.channelsPerConnection
+						.get(connection);
 				if (channels == null) {
 					channels = new LinkedList<Channel>();
 					this.channelsPerConnection.put(connection, channels);
@@ -125,15 +132,32 @@ public class RabbitResourceHolder extends ResourceHolderSupport {
 	}
 
 	public Connection getConnection() {
-		return (!this.connections.isEmpty() ? this.connections.get(0) : null);
+		if (this.connections.isEmpty()) {
+			return null;
+		}
+		for (Connection conn : this.connections) {
+			if (conn.isOpen()) {
+				return conn;
+			}
+		}
+		return null;
 	}
 
 	public Connection getConnection(Class<? extends Connection> connectionType) {
-		return CollectionUtils.findValueOfType(this.connections, connectionType);
+		return CollectionUtils
+				.findValueOfType(this.connections, connectionType);
 	}
 
 	public Channel getChannel() {
-		return (!this.channels.isEmpty() ? this.channels.get(0) : null);
+		if (this.channels.isEmpty()) {
+			return null;
+		}
+		for (Channel chan : this.channels) {
+			if (chan.isOpen()) {
+				return chan;
+			}
+		}
+		return null;
 	}
 
 	public void commitAll() throws AmqpException {
@@ -156,14 +180,16 @@ public class RabbitResourceHolder extends ResourceHolderSupport {
 			try {
 				if (channel != ConnectionFactoryUtils.getConsumerChannel()) {
 					channel.close();
-				}
-				else {
+				} else {
 					if (logger.isDebugEnabled()) {
-						logger.debug("Skipping close of consumer channel: " + channel.toString());
+						logger.debug("Skipping close of consumer channel: "
+								+ channel.toString());
 					}
 				}
 			} catch (Throwable ex) {
-				logger.debug("Could not close synchronized Rabbit Channel after transaction", ex);
+				logger.debug(
+						"Could not close synchronized Rabbit Channel after transaction",
+						ex);
 			}
 		}
 		for (Connection con : this.connections) {

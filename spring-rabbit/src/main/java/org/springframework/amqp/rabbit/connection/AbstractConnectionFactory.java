@@ -30,9 +30,10 @@ import com.rabbitmq.client.Address;
 /**
  * @author Dave Syer
  * @author Gary Russell
- *
+ * 
  */
-public abstract class AbstractConnectionFactory implements ConnectionFactory, DisposableBean {
+public abstract class AbstractConnectionFactory implements ConnectionFactory,
+		DisposableBean {
 
 	protected final Log logger = LogFactory.getLog(getClass());
 
@@ -47,11 +48,16 @@ public abstract class AbstractConnectionFactory implements ConnectionFactory, Di
 	private volatile Address[] addresses;
 
 	/**
-	 * Create a new SingleConnectionFactory for the given target ConnectionFactory.
-	 * @param rabbitConnectionFactory the target ConnectionFactory
+	 * Create a new SingleConnectionFactory for the given target
+	 * ConnectionFactory.
+	 * 
+	 * @param rabbitConnectionFactory
+	 *            the target ConnectionFactory
 	 */
-	public AbstractConnectionFactory(com.rabbitmq.client.ConnectionFactory rabbitConnectionFactory) {
-		Assert.notNull(rabbitConnectionFactory, "Target ConnectionFactory must not be null");
+	public AbstractConnectionFactory(
+			com.rabbitmq.client.ConnectionFactory rabbitConnectionFactory) {
+		Assert.notNull(rabbitConnectionFactory,
+				"Target ConnectionFactory must not be null");
 		this.rabbitConnectionFactory = rabbitConnectionFactory;
 	}
 
@@ -89,7 +95,9 @@ public abstract class AbstractConnectionFactory implements ConnectionFactory, Di
 
 	/**
 	 * Set addresses for clustering.
-	 * @param addresses list of addresses with form "host[:port],..."
+	 * 
+	 * @param addresses
+	 *            list of addresses with form "host[:port],..."
 	 */
 	public void setAddresses(String addresses) {
 		Address[] addressArray = Address.parseAddresses(addresses);
@@ -99,8 +107,9 @@ public abstract class AbstractConnectionFactory implements ConnectionFactory, Di
 	}
 
 	/**
-	 * A composite connection listener to be used by subclasses when creating and closing connections.
-	 *
+	 * A composite connection listener to be used by subclasses when creating
+	 * and closing connections.
+	 * 
 	 * @return the connection listener
 	 */
 	protected ConnectionListener getConnectionListener() {
@@ -108,15 +117,17 @@ public abstract class AbstractConnectionFactory implements ConnectionFactory, Di
 	}
 
 	/**
-	 * A composite channel listener to be used by subclasses when creating and closing channels.
-	 *
+	 * A composite channel listener to be used by subclasses when creating and
+	 * closing channels.
+	 * 
 	 * @return the channel listener
 	 */
 	protected ChannelListener getChannelListener() {
 		return channelListener;
 	}
 
-	public void setConnectionListeners(List<? extends ConnectionListener> listeners) {
+	public void setConnectionListeners(
+			List<? extends ConnectionListener> listeners) {
 		this.connectionListener.setDelegates(listeners);
 	}
 
@@ -133,11 +144,12 @@ public abstract class AbstractConnectionFactory implements ConnectionFactory, Di
 	}
 
 	/**
-	 * Provide an Executor for
-	 * use by the Rabbit ConnectionFactory when creating connections.
-	 * Can either be an ExecutorService or a Spring
+	 * Provide an Executor for use by the Rabbit ConnectionFactory when creating
+	 * connections. Can either be an ExecutorService or a Spring
 	 * ThreadPoolTaskExecutor, as defined by a &lt;task:executor/&gt; element.
-	 * @param executor The executor.
+	 * 
+	 * @param executor
+	 *            The executor.
 	 */
 	public void setExecutor(Executor executor) {
 		boolean isExecutorService = executor instanceof ExecutorService;
@@ -145,33 +157,43 @@ public abstract class AbstractConnectionFactory implements ConnectionFactory, Di
 		Assert.isTrue(isExecutorService || isThreadPoolTaskExecutor);
 		if (isExecutorService) {
 			this.executorService = (ExecutorService) executor;
-		}
-		else {
-			this.executorService = ((ThreadPoolTaskExecutor) executor).getThreadPoolExecutor();
+		} else {
+			this.executorService = ((ThreadPoolTaskExecutor) executor)
+					.getThreadPoolExecutor();
 		}
 	}
 
 	final protected Connection createBareConnection() {
+		com.rabbitmq.client.Connection conn = createNativeConnection();
+		return new SimpleConnection(conn);
+	}
+
+	final protected com.rabbitmq.client.Connection createNativeConnection() {
 		try {
+			com.rabbitmq.client.Connection conn = null;
 			if (this.addresses != null) {
-				return new SimpleConnection(this.rabbitConnectionFactory.newConnection(this.executorService, this.addresses));
+				conn = this.rabbitConnectionFactory.newConnection(
+						this.executorService, this.addresses);
+			} else {
+				conn = this.rabbitConnectionFactory
+						.newConnection(this.executorService);
 			}
-			else {
-				return new SimpleConnection(this.rabbitConnectionFactory.newConnection(this.executorService));
-			}
+			return conn;
 		} catch (IOException e) {
 			throw RabbitUtils.convertRabbitAccessException(e);
 		}
 	}
 
-	final protected  String getDefaultHostName() {
+	final protected String getDefaultHostName() {
 		String temp;
 		try {
 			InetAddress localMachine = InetAddress.getLocalHost();
 			temp = localMachine.getHostName();
 			logger.debug("Using hostname [" + temp + "] for hostname.");
 		} catch (UnknownHostException e) {
-			logger.warn("Could not get host name, using 'localhost' as default value", e);
+			logger.warn(
+					"Could not get host name, using 'localhost' as default value",
+					e);
 			temp = "localhost";
 		}
 		return temp;

@@ -26,30 +26,36 @@ import org.springframework.util.Assert;
 import com.rabbitmq.client.Channel;
 
 /**
- * Helper class for managing a Spring based Rabbit {@link org.springframework.amqp.rabbit.connection.ConnectionFactory},
- * in particular for obtaining transactional Rabbit resources for a given ConnectionFactory.
- *
+ * Helper class for managing a Spring based Rabbit
+ * {@link org.springframework.amqp.rabbit.connection.ConnectionFactory}, in
+ * particular for obtaining transactional Rabbit resources for a given
+ * ConnectionFactory.
+ * 
  * <p>
- * Mainly for internal use within the framework. Used by {@link org.springframework.amqp.rabbit.core.RabbitTemplate} as
- * well as {@link org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer}.
- *
+ * Mainly for internal use within the framework. Used by
+ * {@link org.springframework.amqp.rabbit.core.RabbitTemplate} as well as
+ * {@link org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer}.
+ * 
  * @author Mark Fisher
  * @author Dave Syer
  * @author Gary Russell
  */
 public class ConnectionFactoryUtils {
 
-	private static final Log logger = LogFactory.getLog(ConnectionFactoryUtils.class);
+	private static final Log logger = LogFactory
+			.getLog(ConnectionFactoryUtils.class);
 
 	private static final ThreadLocal<Channel> consumerChannel = new ThreadLocal<Channel>();
 
 	/**
-	 * If a listener container is configured to use a RabbitTransactionManager, the
-	 * consumer's channel is registered here so that it is used as the bound resource
-	 * when the transaction actually starts. It is normally not necessary to use
-	 * an external transaction manager because local transactions work the same in that
-	 * the channel is bound to the thread. This is for the case when a user happens
-	 * to wire in a RabbitTransactionManager.
+	 * If a listener container is configured to use a RabbitTransactionManager,
+	 * the consumer's channel is registered here so that it is used as the bound
+	 * resource when the transaction actually starts. It is normally not
+	 * necessary to use an external transaction manager because local
+	 * transactions work the same in that the channel is bound to the thread.
+	 * This is for the case when a user happens to wire in a
+	 * RabbitTransactionManager.
+	 * 
 	 * @param channel
 	 */
 	public static void registerConsumerChannel(Channel channel) {
@@ -60,12 +66,13 @@ public class ConnectionFactoryUtils {
 	}
 
 	/**
-	 * See registerConsumerChannel. This method is called to unregister
-	 * the channel when the consumer exits.
+	 * See registerConsumerChannel. This method is called to unregister the
+	 * channel when the consumer exits.
 	 */
 	public static void unRegisterConsumerChannel() {
 		if (logger.isDebugEnabled()) {
-			logger.debug("Unregistering consumer channel" + consumerChannel.get());
+			logger.debug("Unregistering consumer channel"
+					+ consumerChannel.get());
 		}
 		consumerChannel.remove();
 	}
@@ -79,66 +86,88 @@ public class ConnectionFactoryUtils {
 	}
 
 	/**
-	 * Determine whether the given RabbitMQ Channel is transactional, that is, bound to the current thread by Spring's
-	 * transaction facilities.
-	 * @param channel the RabbitMQ Channel to check
-	 * @param connectionFactory the RabbitMQ ConnectionFactory that the Channel originated from
+	 * Determine whether the given RabbitMQ Channel is transactional, that is,
+	 * bound to the current thread by Spring's transaction facilities.
+	 * 
+	 * @param channel
+	 *            the RabbitMQ Channel to check
+	 * @param connectionFactory
+	 *            the RabbitMQ ConnectionFactory that the Channel originated
+	 *            from
 	 * @return whether the Channel is transactional
 	 */
-	public static boolean isChannelTransactional(Channel channel, ConnectionFactory connectionFactory) {
+	public static boolean isChannelTransactional(Channel channel,
+			ConnectionFactory connectionFactory) {
 		if (channel == null || connectionFactory == null) {
 			return false;
 		}
 		RabbitResourceHolder resourceHolder = (RabbitResourceHolder) TransactionSynchronizationManager
 				.getResource(connectionFactory);
-		return (resourceHolder != null && resourceHolder.containsChannel(channel));
+		return (resourceHolder != null && resourceHolder
+				.containsChannel(channel));
 	}
 
 	/**
-	 * Obtain a RabbitMQ Channel that is synchronized with the current transaction, if any.
-	 * @param connectionFactory the ConnectionFactory to obtain a Channel for
-	 * @param synchedLocalTransactionAllowed whether to allow for a local RabbitMQ transaction that is synchronized with
-	 * a Spring-managed transaction (where the main transaction might be a JDBC-based one for a specific DataSource, for
-	 * example), with the RabbitMQ transaction committing right after the main transaction. If not allowed, the given
-	 * ConnectionFactory needs to handle transaction enlistment underneath the covers.
+	 * Obtain a RabbitMQ Channel that is synchronized with the current
+	 * transaction, if any.
+	 * 
+	 * @param connectionFactory
+	 *            the ConnectionFactory to obtain a Channel for
+	 * @param synchedLocalTransactionAllowed
+	 *            whether to allow for a local RabbitMQ transaction that is
+	 *            synchronized with a Spring-managed transaction (where the main
+	 *            transaction might be a JDBC-based one for a specific
+	 *            DataSource, for example), with the RabbitMQ transaction
+	 *            committing right after the main transaction. If not allowed,
+	 *            the given ConnectionFactory needs to handle transaction
+	 *            enlistment underneath the covers.
 	 * @return the transactional Channel, or <code>null</code> if none found
 	 */
-	public static RabbitResourceHolder getTransactionalResourceHolder(final ConnectionFactory connectionFactory,
+	public static RabbitResourceHolder getTransactionalResourceHolder(
+			final ConnectionFactory connectionFactory,
 			final boolean synchedLocalTransactionAllowed) {
 
-		RabbitResourceHolder holder = doGetTransactionalResourceHolder(connectionFactory, new ResourceFactory() {
-			public Channel getChannel(RabbitResourceHolder holder) {
-				return holder.getChannel();
-			}
+		RabbitResourceHolder holder = doGetTransactionalResourceHolder(
+				connectionFactory, new ResourceFactory() {
+					public Channel getChannel(RabbitResourceHolder holder) {
+						return holder.getChannel();
+					}
 
-			public Connection getConnection(RabbitResourceHolder holder) {
-				return holder.getConnection();
-			}
+					public Connection getConnection(RabbitResourceHolder holder) {
+						return holder.getConnection();
+					}
 
-			public Connection createConnection() throws IOException {
-				return connectionFactory.createConnection();
-			}
+					public Connection createConnection() throws IOException {
+						return connectionFactory.createConnection();
+					}
 
-			public Channel createChannel(Connection con) throws IOException {
-				return con.createChannel(synchedLocalTransactionAllowed);
-			}
+					public Channel createChannel(Connection con)
+							throws IOException {
+						return con
+								.createChannel(synchedLocalTransactionAllowed);
+					}
 
-			public boolean isSynchedLocalTransactionAllowed() {
-				return synchedLocalTransactionAllowed;
-			}
-		});
+					public boolean isSynchedLocalTransactionAllowed() {
+						return synchedLocalTransactionAllowed;
+					}
+				});
 		return holder;
 	}
 
 	/**
-	 * Obtain a RabbitMQ Channel that is synchronized with the current transaction, if any.
-	 * @param connectionFactory the RabbitMQ ConnectionFactory to bind for (used as TransactionSynchronizationManager
-	 * key)
-	 * @param resourceFactory the ResourceFactory to use for extracting or creating RabbitMQ resources
+	 * Obtain a RabbitMQ Channel that is synchronized with the current
+	 * transaction, if any.
+	 * 
+	 * @param connectionFactory
+	 *            the RabbitMQ ConnectionFactory to bind for (used as
+	 *            TransactionSynchronizationManager key)
+	 * @param resourceFactory
+	 *            the ResourceFactory to use for extracting or creating RabbitMQ
+	 *            resources
 	 * @return the transactional Channel, or <code>null</code> if none found
 	 */
-	private static RabbitResourceHolder doGetTransactionalResourceHolder(ConnectionFactory connectionFactory,
-			ResourceFactory resourceFactory) {
+	private static RabbitResourceHolder doGetTransactionalResourceHolder(
+			ConnectionFactory connectionFactory, ResourceFactory resourceFactory) {
 
 		Assert.notNull(connectionFactory, "ConnectionFactory must not be null");
 		Assert.notNull(resourceFactory, "ResourceFactory must not be null");
@@ -155,7 +184,8 @@ public class ConnectionFactoryUtils {
 		if (resourceHolderToUse == null) {
 			resourceHolderToUse = new RabbitResourceHolder();
 		}
-		Connection connection = resourceFactory.getConnection(resourceHolderToUse);
+		Connection connection = resourceFactory
+				.getConnection(resourceHolderToUse);
 		Channel channel = null;
 		try {
 			boolean isExistingCon = (connection != null);
@@ -167,10 +197,13 @@ public class ConnectionFactoryUtils {
 			if (channel == null) {
 				channel = resourceFactory.createChannel(connection);
 			}
-			resourceHolderToUse.addChannel(channel, connection);
+			if (null != channel && channel.isOpen()) {
+				resourceHolderToUse.addChannel(channel, connection);
+			}
 
 			if (resourceHolderToUse != resourceHolder) {
-				bindResourceToTransaction(resourceHolderToUse, connectionFactory,
+				bindResourceToTransaction(resourceHolderToUse,
+						connectionFactory,
 						resourceFactory.isSynchedLocalTransactionAllowed());
 			}
 
@@ -184,32 +217,37 @@ public class ConnectionFactoryUtils {
 	}
 
 	public static void releaseResources(RabbitResourceHolder resourceHolder) {
-		if (resourceHolder == null || resourceHolder.isSynchronizedWithTransaction()) {
+		if (resourceHolder == null
+				|| resourceHolder.isSynchronizedWithTransaction()) {
 			return;
 		}
 		RabbitUtils.closeChannel(resourceHolder.getChannel());
 		RabbitUtils.closeConnection(resourceHolder.getConnection());
 	}
 
-	public static void bindResourceToTransaction(RabbitResourceHolder resourceHolder,
+	public static void bindResourceToTransaction(
+			RabbitResourceHolder resourceHolder,
 			ConnectionFactory connectionFactory, boolean synched) {
 		if (TransactionSynchronizationManager.hasResource(connectionFactory)
-				|| !TransactionSynchronizationManager.isActualTransactionActive() || !synched) {
+				|| !TransactionSynchronizationManager
+						.isActualTransactionActive() || !synched) {
 			return;
 		}
-		TransactionSynchronizationManager.bindResource(connectionFactory, resourceHolder);
+		TransactionSynchronizationManager.bindResource(connectionFactory,
+				resourceHolder);
 		resourceHolder.setSynchronizedWithTransaction(true);
 		if (TransactionSynchronizationManager.isSynchronizationActive()) {
-			TransactionSynchronizationManager.registerSynchronization(new RabbitResourceSynchronization(resourceHolder,
-					connectionFactory, synched));
+			TransactionSynchronizationManager
+					.registerSynchronization(new RabbitResourceSynchronization(
+							resourceHolder, connectionFactory, synched));
 		}
 	}
 
 	/**
 	 *
 	 */
-	public static void registerDeliveryTag(ConnectionFactory connectionFactory, Channel channel, Long tag)
-			throws IOException {
+	public static void registerDeliveryTag(ConnectionFactory connectionFactory,
+			Channel channel, Long tag) throws IOException {
 
 		Assert.notNull(connectionFactory, "ConnectionFactory must not be null");
 
@@ -221,52 +259,71 @@ public class ConnectionFactoryUtils {
 	}
 
 	/**
-	 * Callback interface for resource creation. Serving as argument for the <code>doGetTransactionalChannel</code>
-	 * method.
+	 * Callback interface for resource creation. Serving as argument for the
+	 * <code>doGetTransactionalChannel</code> method.
 	 */
 	public interface ResourceFactory {
 
 		/**
 		 * Fetch an appropriate Channel from the given RabbitResourceHolder.
-		 * @param holder the RabbitResourceHolder
-		 * @return an appropriate Channel fetched from the holder, or <code>null</code> if none found
+		 * 
+		 * @param holder
+		 *            the RabbitResourceHolder
+		 * @return an appropriate Channel fetched from the holder, or
+		 *         <code>null</code> if none found
 		 */
 		Channel getChannel(RabbitResourceHolder holder);
 
 		/**
 		 * Fetch an appropriate Connection from the given RabbitResourceHolder.
-		 * @param holder the RabbitResourceHolder
-		 * @return an appropriate Connection fetched from the holder, or <code>null</code> if none found
+		 * 
+		 * @param holder
+		 *            the RabbitResourceHolder
+		 * @return an appropriate Connection fetched from the holder, or
+		 *         <code>null</code> if none found
 		 */
 		Connection getConnection(RabbitResourceHolder holder);
 
 		/**
-		 * Create a new RabbitMQ Connection for registration with a RabbitResourceHolder.
+		 * Create a new RabbitMQ Connection for registration with a
+		 * RabbitResourceHolder.
+		 * 
 		 * @return the new RabbitMQ Connection
-		 * @throws IOException if thrown by RabbitMQ API methods
+		 * @throws IOException
+		 *             if thrown by RabbitMQ API methods
 		 */
 		Connection createConnection() throws IOException;
 
 		/**
-		 * Create a new RabbitMQ Session for registration with a RabbitResourceHolder.
-		 * @param con the RabbitMQ Connection to create a Channel for
+		 * Create a new RabbitMQ Session for registration with a
+		 * RabbitResourceHolder.
+		 * 
+		 * @param con
+		 *            the RabbitMQ Connection to create a Channel for
 		 * @return the new RabbitMQ Channel
-		 * @throws IOException if thrown by RabbitMQ API methods
+		 * @throws IOException
+		 *             if thrown by RabbitMQ API methods
 		 */
 		Channel createChannel(Connection con) throws IOException;
 
 		/**
-		 * Return whether to allow for a local RabbitMQ transaction that is synchronized with a Spring-managed
-		 * transaction (where the main transaction might be a JDBC-based one for a specific DataSource, for example),
-		 * with the RabbitMQ transaction committing right after the main transaction.
-		 * @return whether to allow for synchronizing a local RabbitMQ transaction
+		 * Return whether to allow for a local RabbitMQ transaction that is
+		 * synchronized with a Spring-managed transaction (where the main
+		 * transaction might be a JDBC-based one for a specific DataSource, for
+		 * example), with the RabbitMQ transaction committing right after the
+		 * main transaction.
+		 * 
+		 * @return whether to allow for synchronizing a local RabbitMQ
+		 *         transaction
 		 */
 		boolean isSynchedLocalTransactionAllowed();
 	}
 
 	/**
-	 * Callback for resource cleanup at the end of a non-native RabbitMQ transaction (e.g. when participating in a
-	 * JtaTransactionManager transaction).
+	 * Callback for resource cleanup at the end of a non-native RabbitMQ
+	 * transaction (e.g. when participating in a JtaTransactionManager
+	 * transaction).
+	 * 
 	 * @see org.springframework.transaction.jta.JtaTransactionManager
 	 */
 	private static class RabbitResourceSynchronization extends
@@ -276,7 +333,9 @@ public class ConnectionFactoryUtils {
 
 		private final RabbitResourceHolder resourceHolder;
 
-		public RabbitResourceSynchronization(RabbitResourceHolder resourceHolder, Object resourceKey, boolean transacted) {
+		public RabbitResourceSynchronization(
+				RabbitResourceHolder resourceHolder, Object resourceKey,
+				boolean transacted) {
 			super(resourceHolder, resourceKey);
 			this.resourceHolder = resourceHolder;
 			this.transacted = transacted;
@@ -288,7 +347,8 @@ public class ConnectionFactoryUtils {
 		}
 
 		@Override
-		protected void processResourceAfterCommit(RabbitResourceHolder resourceHolder) {
+		protected void processResourceAfterCommit(
+				RabbitResourceHolder resourceHolder) {
 			resourceHolder.commitAll();
 		}
 
@@ -304,7 +364,8 @@ public class ConnectionFactoryUtils {
 		}
 
 		@Override
-		protected void releaseResource(RabbitResourceHolder resourceHolder, Object resourceKey) {
+		protected void releaseResource(RabbitResourceHolder resourceHolder,
+				Object resourceKey) {
 			ConnectionFactoryUtils.releaseResources(resourceHolder);
 		}
 	}

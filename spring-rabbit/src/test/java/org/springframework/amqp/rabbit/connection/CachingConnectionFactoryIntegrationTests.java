@@ -1,7 +1,6 @@
 package org.springframework.amqp.rabbit.connection;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.util.concurrent.CountDownLatch;
@@ -24,14 +23,14 @@ import org.springframework.amqp.rabbit.test.BrokerTestUtils;
 
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.DefaultConsumer;
-import com.rabbitmq.client.ShutdownListener;
-import com.rabbitmq.client.ShutdownSignalException;
 
 public class CachingConnectionFactoryIntegrationTests {
 
-	private static Log logger = LogFactory.getLog(CachingConnectionFactoryIntegrationTests.class);
+	private static Log logger = LogFactory
+			.getLog(CachingConnectionFactoryIntegrationTests.class);
 
-	private CachingConnectionFactory connectionFactory = new CachingConnectionFactory();
+	private CachingConnectionFactory connectionFactory = new CachingConnectionFactory(
+			"localhost");
 
 	@Rule
 	public BrokerRunning brokerIsRunning = BrokerRunning.isRunning();
@@ -64,11 +63,28 @@ public class CachingConnectionFactoryIntegrationTests {
 	}
 
 	@Test
+	public void testSendAndReceiveFromVolatileQueueWithPublisherComfirm()
+			throws Exception {
+		// enable publishconfirms
+		connectionFactory.setPublisherConfirms(true);
+
+		RabbitTemplate template = new RabbitTemplate(connectionFactory);
+
+		RabbitAdmin admin = new RabbitAdmin(connectionFactory);
+		Queue queue = admin.declareQueue();
+		template.convertAndSend(queue.getName(), "message");
+		String result = (String) template.receiveAndConvert(queue.getName());
+		assertEquals("message", result);
+
+	}
+
+	@Test
 	public void testReceiveFromNonExistentVirtualHost() throws Exception {
 
 		connectionFactory.setVirtualHost("non-existent");
 		RabbitTemplate template = new RabbitTemplate(connectionFactory);
-		// Wrong vhost is very unfriendly to client - the exception has no clue (just an EOF)
+		// Wrong vhost is very unfriendly to client - the exception has no clue
+		// (just an EOF)
 		exception.expect(AmqpIOException.class);
 		String result = (String) template.receiveAndConvert("foo");
 		assertEquals("message", result);
@@ -76,7 +92,8 @@ public class CachingConnectionFactoryIntegrationTests {
 	}
 
 	@Test
-	public void testSendAndReceiveFromVolatileQueueAfterImplicitRemoval() throws Exception {
+	public void testSendAndReceiveFromVolatileQueueAfterImplicitRemoval()
+			throws Exception {
 
 		RabbitTemplate template = new RabbitTemplate(connectionFactory);
 
@@ -91,6 +108,25 @@ public class CachingConnectionFactoryIntegrationTests {
 		exception.expect(AmqpIOException.class);
 
 		String result = (String) template.receiveAndConvert(queue.getName());
+		assertEquals("message", result);
+
+	}
+
+	@Test
+	public void testSendAndReceiveFromNonVolatileQueueAfterImplicitRemoval()
+			throws Exception {
+
+		RabbitTemplate template = new RabbitTemplate(connectionFactory);
+
+		RabbitAdmin admin = new RabbitAdmin(connectionFactory);
+		String queueName = "abc";
+		admin.declareQueue(new Queue(queueName, false, false, false));
+		template.convertAndSend(queueName, "message");
+
+		// Force a physical close of the channel
+		connectionFactory.destroy();
+
+		String result = (String) template.receiveAndConvert(queueName);
 		assertEquals("message", result);
 
 	}
@@ -114,7 +150,8 @@ public class CachingConnectionFactoryIntegrationTests {
 
 		template2.execute(new ChannelCallback<Void>() {
 			public Void doInRabbit(Channel channel) throws Exception {
-				// Should be an exception because the channel is not transactional
+				// Should be an exception because the channel is not
+				// transactional
 				channel.txRollback();
 				return null;
 			}
@@ -135,17 +172,23 @@ public class CachingConnectionFactoryIntegrationTests {
 		try {
 			template.execute(new ChannelCallback<Object>() {
 				public Object doInRabbit(Channel channel) throws Exception {
-					channel.getConnection().addShutdownListener(new ShutdownListener() {
-						public void shutdownCompleted(ShutdownSignalException cause) {
-							logger.info("Error", cause);
-							latch.countDown();
-							// This will be thrown on the Connection thread just before it dies, so basically ignored
-							throw new RuntimeException(cause);
-						}
-					});
-					String tag = channel.basicConsume(route, new DefaultConsumer(channel));
-					// Consume twice with the same tag is a hard error (connection will be reset)
-					String result = channel.basicConsume(route, false, tag, new DefaultConsumer(channel));
+					// channel.getConnection().addShutdownListener(new
+					// ShutdownListener() {
+					// public void shutdownCompleted(ShutdownSignalException
+					// cause) {
+					// logger.info("Error", cause);
+					// latch.countDown();
+					// // This will be thrown on the Connection thread just
+					// before it dies, so basically ignored
+					// throw new RuntimeException(cause);
+					// }
+					// });
+					String tag = channel.basicConsume(route,
+							new DefaultConsumer(channel));
+					// Consume twice with the same tag is a hard error
+					// (connection will be reset)
+					String result = channel.basicConsume(route, false, tag,
+							new DefaultConsumer(channel));
 					fail("Expected IOException, got: " + result);
 					return null;
 				}
@@ -155,7 +198,8 @@ public class CachingConnectionFactoryIntegrationTests {
 			// expected
 		}
 		template.convertAndSend(route, "message");
-		assertTrue(latch.await(1000, TimeUnit.MILLISECONDS));
+		// assertTrue(latch.await(1000, TimeUnit.MILLISECONDS));
+		TimeUnit.MILLISECONDS.sleep(1000);
 		String result = (String) template.receiveAndConvert(route);
 		assertEquals("message", result);
 		result = (String) template.receiveAndConvert(route);
