@@ -118,7 +118,7 @@ project('spring-amqp') {
 		compile ("org.springframework:spring-context:$springVersion", optional)
 		compile ("org.codehaus.jackson:jackson-core-asl:$jacksonVersion", optional)
 		compile ("org.codehaus.jackson:jackson-mapper-asl:$jacksonVersion", optional)
-
+		compile "com.rabbitmq:amqp-client:$rabbitmqVersion"
 	}
 
 }
