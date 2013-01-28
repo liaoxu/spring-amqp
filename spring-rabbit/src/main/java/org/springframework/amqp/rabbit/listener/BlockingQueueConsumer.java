@@ -15,7 +15,9 @@ package org.springframework.amqp.rabbit.listener;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -43,21 +45,24 @@ import com.rabbitmq.client.ShutdownSignalException;
 import com.rabbitmq.utility.Utility;
 
 /**
- * Specialized consumer encapsulating knowledge of the broker connections and having its own lifecycle (start and stop).
- *
+ * Specialized consumer encapsulating knowledge of the broker connections and
+ * having its own lifecycle (start and stop).
+ * 
  * @author Mark Pollack
  * @author Dave Syer
  * @author Gary Russell
- *
+ * 
  */
 public class BlockingQueueConsumer {
 
 	private static Log logger = LogFactory.getLog(BlockingQueueConsumer.class);
 
-	// This must be an unbounded queue or we risk blocking the Connection thread.
+	// This must be an unbounded queue or we risk blocking the Connection
+	// thread.
 	private final BlockingQueue<Delivery> queue = new LinkedBlockingQueue<Delivery>();
 
-	// When this is non-null the connection has been closed (should never happen in normal operation).
+	// When this is non-null the connection has been closed (should never happen
+	// in normal operation).
 	private volatile ShutdownSignalException shutdown;
 
 	private final String[] queues;
@@ -84,28 +89,34 @@ public class BlockingQueueConsumer {
 
 	private Set<Long> deliveryTags = new LinkedHashSet<Long>();
 
+	private Map<Long, Integer> retryDeliveryTags = new HashMap<Long, Integer>();
+
 	private final boolean defaultRequeuRejected;
 
 	/**
-	 * Create a consumer. The consumer must not attempt to use the connection factory or communicate with the broker
-	 * until it is started. RequeueRejected defaults to true.
+	 * Create a consumer. The consumer must not attempt to use the connection
+	 * factory or communicate with the broker until it is started.
+	 * RequeueRejected defaults to true.
 	 */
 	public BlockingQueueConsumer(ConnectionFactory connectionFactory,
 			MessagePropertiesConverter messagePropertiesConverter,
-			ActiveObjectCounter<BlockingQueueConsumer> activeObjectCounter, AcknowledgeMode acknowledgeMode,
-			boolean transactional, int prefetchCount, String... queues) {
-		this(connectionFactory, messagePropertiesConverter, activeObjectCounter,
-				acknowledgeMode, transactional, prefetchCount, true, queues);
+			ActiveObjectCounter<BlockingQueueConsumer> activeObjectCounter,
+			AcknowledgeMode acknowledgeMode, boolean transactional,
+			int prefetchCount, String... queues) {
+		this(connectionFactory, messagePropertiesConverter,
+				activeObjectCounter, acknowledgeMode, transactional,
+				prefetchCount, true, queues);
 	}
 
 	/**
-	 * Create a consumer. The consumer must not attempt to use the connection factory or communicate with the broker
-	 * until it is started.
+	 * Create a consumer. The consumer must not attempt to use the connection
+	 * factory or communicate with the broker until it is started.
 	 */
 	public BlockingQueueConsumer(ConnectionFactory connectionFactory,
 			MessagePropertiesConverter messagePropertiesConverter,
-			ActiveObjectCounter<BlockingQueueConsumer> activeObjectCounter, AcknowledgeMode acknowledgeMode,
-			boolean transactional, int prefetchCount, boolean defaultRequeueRejected, String... queues) {
+			ActiveObjectCounter<BlockingQueueConsumer> activeObjectCounter,
+			AcknowledgeMode acknowledgeMode, boolean transactional,
+			int prefetchCount, boolean defaultRequeueRejected, String... queues) {
 		this.connectionFactory = connectionFactory;
 		this.messagePropertiesConverter = messagePropertiesConverter;
 		this.activeObjectCounter = activeObjectCounter;
@@ -134,9 +145,10 @@ public class BlockingQueueConsumer {
 	}
 
 	/**
-	 * If this is a non-POISON non-null delivery simply return it. If this is POISON we are in shutdown mode, throw
-	 * shutdown. If delivery is null, we may be in shutdown mode. Check and see.
-	 *
+	 * If this is a non-POISON non-null delivery simply return it. If this is
+	 * POISON we are in shutdown mode, throw shutdown. If delivery is null, we
+	 * may be in shutdown mode. Check and see.
+	 * 
 	 * @throws InterruptedException
 	 */
 	private Message handle(Delivery delivery) throws InterruptedException {
@@ -149,38 +161,50 @@ public class BlockingQueueConsumer {
 		byte[] body = delivery.getBody();
 		Envelope envelope = delivery.getEnvelope();
 
-		MessageProperties messageProperties = this.messagePropertiesConverter.toMessageProperties(
-				delivery.getProperties(), envelope, "UTF-8");
+		MessageProperties messageProperties = this.messagePropertiesConverter
+				.toMessageProperties(delivery.getProperties(), envelope,
+						"UTF-8");
 		messageProperties.setMessageCount(0);
 		Message message = new Message(body, messageProperties);
 		if (logger.isDebugEnabled()) {
 			logger.debug("Received message: " + message);
 		}
 		deliveryTags.add(messageProperties.getDeliveryTag());
+		int retryTimes = getRequeueTimes(message);
+		retryDeliveryTags.put(messageProperties.getDeliveryTag(), ++retryTimes);
 		return message;
 	}
 
 	/**
-	 * Main application-side API: wait for the next message delivery and return it.
-	 *
+	 * Main application-side API: wait for the next message delivery and return
+	 * it.
+	 * 
 	 * @return the next message
-	 * @throws InterruptedException if an interrupt is received while waiting
-	 * @throws ShutdownSignalException if the connection is shut down while waiting
+	 * @throws InterruptedException
+	 *             if an interrupt is received while waiting
+	 * @throws ShutdownSignalException
+	 *             if the connection is shut down while waiting
 	 */
-	public Message nextMessage() throws InterruptedException, ShutdownSignalException {
+	public Message nextMessage() throws InterruptedException,
+			ShutdownSignalException {
 		logger.trace("Retrieving delivery for " + this);
 		return handle(queue.take());
 	}
 
 	/**
-	 * Main application-side API: wait for the next message delivery and return it.
-	 *
-	 * @param timeout timeout in millisecond
+	 * Main application-side API: wait for the next message delivery and return
+	 * it.
+	 * 
+	 * @param timeout
+	 *            timeout in millisecond
 	 * @return the next message or null if timed out
-	 * @throws InterruptedException if an interrupt is received while waiting
-	 * @throws ShutdownSignalException if the connection is shut down while waiting
+	 * @throws InterruptedException
+	 *             if an interrupt is received while waiting
+	 * @throws ShutdownSignalException
+	 *             if the connection is shut down while waiting
 	 */
-	public Message nextMessage(long timeout) throws InterruptedException, ShutdownSignalException {
+	public Message nextMessage(long timeout) throws InterruptedException,
+			ShutdownSignalException {
 		if (logger.isDebugEnabled()) {
 			logger.debug("Retrieving delivery for " + this);
 		}
@@ -196,8 +220,8 @@ public class BlockingQueueConsumer {
 		if (logger.isDebugEnabled()) {
 			logger.debug("Starting consumer " + this);
 		}
-		this.channel = ConnectionFactoryUtils.getTransactionalResourceHolder(connectionFactory, transactional)
-				.getChannel();
+		this.channel = ConnectionFactoryUtils.getTransactionalResourceHolder(
+				connectionFactory, transactional).getChannel();
 		this.consumer = new InternalConsumer(channel);
 		this.deliveryTags.clear();
 		this.activeObjectCounter.add(this);
@@ -205,7 +229,8 @@ public class BlockingQueueConsumer {
 		do {
 			try {
 				if (!acknowledgeMode.isAutoAck()) {
-					// Set basicQos before calling basicConsume (otherwise if we are not acking the broker
+					// Set basicQos before calling basicConsume (otherwise if we
+					// are not acking the broker
 					// will send blocks of 100 messages)
 					channel.basicQos(prefetchCount);
 				}
@@ -216,7 +241,8 @@ public class BlockingQueueConsumer {
 			} catch (IOException e) {
 				if (passiveDeclareTries > 0 && channel.isOpen()) {
 					if (logger.isWarnEnabled()) {
-						logger.warn("Reconnect failed; retries left=" + (passiveDeclareTries-1), e);
+						logger.warn("Reconnect failed; retries left="
+								+ (passiveDeclareTries - 1), e);
 						try {
 							Thread.sleep(5000);
 						} catch (InterruptedException e1) {
@@ -225,17 +251,21 @@ public class BlockingQueueConsumer {
 					}
 				} else {
 					this.activeObjectCounter.release(this);
-					throw new FatalListenerStartupException("Cannot prepare queue for listener. "
-							+ "Either the queue doesn't exist or the broker will not allow us to use it.", e);
+					throw new FatalListenerStartupException(
+							"Cannot prepare queue for listener. "
+									+ "Either the queue doesn't exist or the broker will not allow us to use it.",
+							e);
 				}
 			}
 		} while (passiveDeclareTries-- > 0);
 
 		try {
 			for (int i = 0; i < queues.length; i++) {
-				channel.basicConsume(queues[i], acknowledgeMode.isAutoAck(), consumer);
+				channel.basicConsume(queues[i], acknowledgeMode.isAutoAck(),
+						consumer);
 				if (logger.isDebugEnabled()) {
-					logger.debug("Started on queue '" + queues[i] + "': " + this);
+					logger.debug("Started on queue '" + queues[i] + "': "
+							+ this);
 				}
 			}
 		} catch (IOException e) {
@@ -245,10 +275,12 @@ public class BlockingQueueConsumer {
 
 	public void stop() {
 		cancelled.set(true);
-		if (consumer != null && consumer.getChannel() != null && consumer.getConsumerTag() != null
+		if (consumer != null && consumer.getChannel() != null
+				&& consumer.getConsumerTag() != null
 				&& !this.cancelReceived.get()) {
 			try {
-				RabbitUtils.closeMessageConsumer(consumer.getChannel(), consumer.getConsumerTag(), transactional);
+				RabbitUtils.closeMessageConsumer(consumer.getChannel(),
+						consumer.getConsumerTag(), transactional);
 			} catch (Exception e) {
 				if (logger.isDebugEnabled()) {
 					logger.debug("Error closing consumer", e);
@@ -262,6 +294,7 @@ public class BlockingQueueConsumer {
 		// This one never throws exceptions...
 		RabbitUtils.closeChannel(channel);
 		deliveryTags.clear();
+		retryDeliveryTags.clear();
 		consumer = null;
 	}
 
@@ -272,13 +305,16 @@ public class BlockingQueueConsumer {
 		}
 
 		@Override
-		public void handleShutdownSignal(String consumerTag, ShutdownSignalException sig) {
+		public void handleShutdownSignal(String consumerTag,
+				ShutdownSignalException sig) {
 			if (logger.isDebugEnabled()) {
-				logger.debug("Received shutdown signal for consumer tag=" + consumerTag, sig);
+				logger.debug("Received shutdown signal for consumer tag="
+						+ consumerTag, sig);
 			}
 			shutdown = sig;
 			// The delivery tags will be invalid if the channel shuts down
 			deliveryTags.clear();
+			retryDeliveryTags.clear();
 		}
 
 		@Override
@@ -292,14 +328,16 @@ public class BlockingQueueConsumer {
 		@Override
 		public void handleCancelOk(String consumerTag) {
 			if (logger.isDebugEnabled()) {
-				logger.debug("Received cancellation notice for " + BlockingQueueConsumer.this);
+				logger.debug("Received cancellation notice for "
+						+ BlockingQueueConsumer.this);
 			}
 			// Signal to the container that we have been cancelled
 			activeObjectCounter.release(BlockingQueueConsumer.this);
 		}
 
 		@Override
-		public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
+		public void handleDelivery(String consumerTag, Envelope envelope,
+				AMQP.BasicProperties properties, byte[] body)
 				throws IOException {
 			if (cancelled.get()) {
 				if (acknowledgeMode.isTransactionAllowed()) {
@@ -307,10 +345,12 @@ public class BlockingQueueConsumer {
 				}
 			}
 			if (logger.isDebugEnabled()) {
-				logger.debug("Storing delivery for " + BlockingQueueConsumer.this);
+				logger.debug("Storing delivery for "
+						+ BlockingQueueConsumer.this);
 			}
 			try {
-				// N.B. we can't use a bounded queue and offer() here with a timeout
+				// N.B. we can't use a bounded queue and offer() here with a
+				// timeout
 				// in case the connection thread gets blocked
 				queue.put(new Delivery(envelope, properties, body));
 			} catch (InterruptedException e) {
@@ -329,7 +369,8 @@ public class BlockingQueueConsumer {
 		private final AMQP.BasicProperties properties;
 		private final byte[] body;
 
-		public Delivery(Envelope envelope, AMQP.BasicProperties properties, byte[] body) {
+		public Delivery(Envelope envelope, AMQP.BasicProperties properties,
+				byte[] body) {
 			this.envelope = envelope;
 			this.properties = properties;
 			this.body = body;
@@ -350,22 +391,29 @@ public class BlockingQueueConsumer {
 
 	@Override
 	public String toString() {
-		return "Consumer: tag=[" + (consumer != null ? consumer.getConsumerTag() : null) + "], channel=" + channel
-				+ ", acknowledgeMode=" + acknowledgeMode + " local queue size=" + queue.size();
+		return "Consumer: tag=["
+				+ (consumer != null ? consumer.getConsumerTag() : null)
+				+ "], channel=" + channel + ", acknowledgeMode="
+				+ acknowledgeMode + " local queue size=" + queue.size();
 	}
 
 	/**
 	 * Perform a rollback, handling rollback exceptions properly.
-	 * @param ex the thrown application exception or error
-	 * @throws Exception in case of a rollback error
+	 * 
+	 * @param ex
+	 *            the thrown application exception or error
+	 * @throws Exception
+	 *             in case of a rollback error
 	 */
 	public void rollbackOnExceptionIfNecessary(Throwable ex) throws Exception {
 
-		boolean ackRequired = !acknowledgeMode.isAutoAck() && !acknowledgeMode.isManual();
+		boolean ackRequired = !acknowledgeMode.isAutoAck()
+				&& !acknowledgeMode.isManual();
 		try {
 			if (transactional) {
 				if (logger.isDebugEnabled()) {
-					logger.debug("Initiating transaction rollback on application exception: " + ex);
+					logger.debug("Initiating transaction rollback on application exception: "
+							+ ex);
 				}
 				RabbitUtils.rollbackIfNecessary(channel);
 			}
@@ -391,19 +439,24 @@ public class BlockingQueueConsumer {
 				}
 			}
 		} catch (Exception e) {
-			logger.error("Application exception overridden by rollback exception", ex);
+			logger.error(
+					"Application exception overridden by rollback exception",
+					ex);
 			throw e;
 		} finally {
 			deliveryTags.clear();
+			retryDeliveryTags.clear();
 		}
 	}
 
 	/**
 	 * Perform a commit or message acknowledgement, as appropriate.
+	 * 
 	 * @param locallyTransacted
 	 * @throws IOException
 	 */
-	public boolean commitIfNecessary(boolean locallyTransacted) throws IOException {
+	public boolean commitIfNecessary(boolean locallyTransacted)
+			throws IOException {
 
 		if (deliveryTags.isEmpty()) {
 			return false;
@@ -411,7 +464,8 @@ public class BlockingQueueConsumer {
 
 		try {
 
-			boolean ackRequired = !acknowledgeMode.isAutoAck() && !acknowledgeMode.isManual();
+			boolean ackRequired = !acknowledgeMode.isAutoAck()
+					&& !acknowledgeMode.isManual();
 
 			if (ackRequired) {
 
@@ -420,13 +474,15 @@ public class BlockingQueueConsumer {
 					// Not locally transacted but it is transacted so it
 					// could be synchronized with an external transaction
 					for (Long deliveryTag : deliveryTags) {
-						ConnectionFactoryUtils.registerDeliveryTag(connectionFactory, channel, deliveryTag);
+						ConnectionFactoryUtils.registerDeliveryTag(
+								connectionFactory, channel, deliveryTag);
 					}
 
 				} else {
 
 					if (!deliveryTags.isEmpty()) {
-						long deliveryTag = new ArrayList<Long>(deliveryTags).get(deliveryTags.size() - 1);
+						long deliveryTag = new ArrayList<Long>(deliveryTags)
+								.get(deliveryTags.size() - 1);
 						channel.basicAck(deliveryTag, true);
 					}
 
@@ -440,10 +496,48 @@ public class BlockingQueueConsumer {
 
 		} finally {
 			deliveryTags.clear();
+			retryDeliveryTags.clear();
 		}
 
 		return true;
 
 	}
 
+	/**
+	 * wrap message back to a delivery and put to ref's queue for retry several
+	 * times
+	 * 
+	 * @param message
+	 * @throws InterruptedException
+	 */
+	public void requeueLocalMessage(Message message)
+			throws InterruptedException {
+		MessageProperties messageProperties = message.getMessageProperties();
+		AMQP.BasicProperties properties = messageProperties == null ? null
+				: this.messagePropertiesConverter.fromMessageProperties(
+						messageProperties, "UTF-8");
+		Envelope envelope = messageProperties == null ? null
+				: this.messagePropertiesConverter
+						.fromMessagePropertiesToEnvelope(messageProperties,
+								"UTF-8");
+		Delivery delivery = new Delivery(envelope, properties,
+				message.getBody());
+		// remove the delivery tags and it will requeue while nextMessage()
+		Long deliveryTag = messageProperties.getDeliveryTag();
+		deliveryTags.remove(deliveryTag);
+		queue.put(delivery);
+	}
+
+	/**
+	 * return requeue times of the message
+	 * 
+	 * @param message
+	 * @return
+	 */
+	public int getRequeueTimes(Message message) {
+		MessageProperties messageProperties = message.getMessageProperties();
+		Long deliveryTag = messageProperties.getDeliveryTag();
+		return retryDeliveryTags.containsKey(deliveryTag) ? retryDeliveryTags
+				.get(deliveryTag) : 0;
+	}
 }

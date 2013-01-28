@@ -18,20 +18,24 @@ package org.springframework.amqp.rabbit.support;
 
 import org.springframework.amqp.core.MessageProperties;
 
-import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.AMQP.BasicProperties;
+import com.rabbitmq.client.Envelope;
 
 /**
- * Strategy interface for converting between Spring AMQP {@link MessageProperties}
- * and RabbitMQ BasicProperties.
- *
+ * Strategy interface for converting between Spring AMQP
+ * {@link MessageProperties} and RabbitMQ BasicProperties.
+ * 
  * @author Mark Fisher
  * @since 1.0
  */
 public interface MessagePropertiesConverter {
 
-	MessageProperties toMessageProperties(BasicProperties source, Envelope envelope, String charset);
+	MessageProperties toMessageProperties(BasicProperties source,
+			Envelope envelope, String charset);
 
-	BasicProperties fromMessageProperties(MessageProperties source, String charset);
+	BasicProperties fromMessageProperties(MessageProperties source,
+			String charset);
 
+	Envelope fromMessagePropertiesToEnvelope(MessageProperties source,
+			String charset);
 }

@@ -33,14 +33,15 @@ import com.rabbitmq.client.LongString;
 
 /**
  * Default implementation of the {@link MessagePropertiesConverter} strategy.
- *
+ * 
  * @author Mark Fisher
  * @since 1.0
  */
-public class DefaultMessagePropertiesConverter implements MessagePropertiesConverter {
+public class DefaultMessagePropertiesConverter implements
+		MessagePropertiesConverter {
 
-	public MessageProperties toMessageProperties(final BasicProperties source, final Envelope envelope,
-			final String charset) {
+	public MessageProperties toMessageProperties(final BasicProperties source,
+			final Envelope envelope, final String charset) {
 		MessageProperties target = new MessageProperties();
 		Map<String, Object> headers = source.getHeaders();
 		if (!CollectionUtils.isEmpty(headers)) {
@@ -69,7 +70,8 @@ public class DefaultMessagePropertiesConverter implements MessagePropertiesConve
 		String correlationId = source.getCorrelationId();
 		if (correlationId != null) {
 			try {
-				target.setCorrelationId(source.getCorrelationId().getBytes(charset));
+				target.setCorrelationId(source.getCorrelationId().getBytes(
+						charset));
 			} catch (UnsupportedEncodingException ex) {
 				throw new AmqpUnsupportedEncodingException(ex);
 			}
@@ -87,7 +89,8 @@ public class DefaultMessagePropertiesConverter implements MessagePropertiesConve
 		return target;
 	}
 
-	public BasicProperties fromMessageProperties(final MessageProperties source, final String charset) {
+	public BasicProperties fromMessageProperties(
+			final MessageProperties source, final String charset) {
 		BasicProperties.Builder target = new BasicProperties.Builder();
 		target.headers(this.convertHeadersIfNecessary(source.getHeaders()));
 		target.timestamp(source.getTimestamp());
@@ -119,22 +122,34 @@ public class DefaultMessagePropertiesConverter implements MessagePropertiesConve
 		return target.build();
 	}
 
-	private Map<String, Object> convertHeadersIfNecessary(Map<String, Object> headers) {
+	public Envelope fromMessagePropertiesToEnvelope(
+			final MessageProperties source, final String charset) {
+		Envelope envelope = source == null ? null : new Envelope(
+				source.getDeliveryTag(), source.isRedelivered(),
+				source.getReceivedExchange(), source.getReceivedRoutingKey());
+		return envelope;
+	}
+
+	private Map<String, Object> convertHeadersIfNecessary(
+			Map<String, Object> headers) {
 		if (CollectionUtils.isEmpty(headers)) {
 			return Collections.<String, Object> emptyMap();
 		}
 		Map<String, Object> writableHeaders = new HashMap<String, Object>();
 		for (Map.Entry<String, Object> entry : headers.entrySet()) {
-			writableHeaders.put(entry.getKey(), this.convertHeaderValueIfNecessary(entry.getValue()));
+			writableHeaders.put(entry.getKey(),
+					this.convertHeaderValueIfNecessary(entry.getValue()));
 		}
 		return writableHeaders;
 	}
 
 	private Object convertHeaderValueIfNecessary(Object value) {
-		boolean valid = (value instanceof String) || (value instanceof byte[]) || (value instanceof Boolean)
-				|| (value instanceof LongString) || (value instanceof Integer) || (value instanceof Long)
-				|| (value instanceof Float) || (value instanceof Double) || (value instanceof BigDecimal)
-				|| (value instanceof Short) || (value instanceof Byte) || (value instanceof Date)
+		boolean valid = (value instanceof String) || (value instanceof byte[])
+				|| (value instanceof Boolean) || (value instanceof LongString)
+				|| (value instanceof Integer) || (value instanceof Long)
+				|| (value instanceof Float) || (value instanceof Double)
+				|| (value instanceof BigDecimal) || (value instanceof Short)
+				|| (value instanceof Byte) || (value instanceof Date)
 				|| (value instanceof List) || (value instanceof Map);
 		if (!valid && value != null) {
 			value = value.toString();
@@ -143,8 +158,9 @@ public class DefaultMessagePropertiesConverter implements MessagePropertiesConve
 	}
 
 	/**
-	 * Converts a LongString value to either a String or DataInputStream based on a length-driven threshold. If the
-	 * length is 1024 bytes or less, a String will be returned, otherwise a DataInputStream is returned.
+	 * Converts a LongString value to either a String or DataInputStream based
+	 * on a length-driven threshold. If the length is 1024 bytes or less, a
+	 * String will be returned, otherwise a DataInputStream is returned.
 	 */
 	private Object convertLongString(LongString longString, String charset) {
 		try {

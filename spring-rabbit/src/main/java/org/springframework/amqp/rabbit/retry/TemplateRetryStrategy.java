@@ -3,6 +3,7 @@ package org.springframework.amqp.rabbit.retry;
 import java.io.IOException;
 
 import org.apache.log4j.Logger;
+import org.springframework.amqp.ShouldRetryLocallyException;
 
 /**
  * 
@@ -23,6 +24,15 @@ public class TemplateRetryStrategy implements RetryStrategy {
 	 * Default value = 2 (one retry)
 	 */
 	public static final int DEFAULT_MAX_OPERATION_INVOCATIONS = 2;
+
+	public TemplateRetryStrategy() {
+	}
+
+	public TemplateRetryStrategy(long operationRetryTimeoutMillis,
+			int maxOperationInvocations) {
+		this.operationRetryTimeoutMillis = operationRetryTimeoutMillis;
+		this.maxOperationInvocations = maxOperationInvocations;
+	}
 
 	private long operationRetryTimeoutMillis = DEFAULT_OPERATION_RETRY_TIMEOUT_MILLIS;
 
@@ -56,7 +66,8 @@ public class TemplateRetryStrategy implements RetryStrategy {
 			return false;
 		}
 
-		if (!(e instanceof IOException)) {
+		if (!(e instanceof IOException)
+				&& !(e instanceof ShouldRetryLocallyException)) {
 			return false;
 		}
 

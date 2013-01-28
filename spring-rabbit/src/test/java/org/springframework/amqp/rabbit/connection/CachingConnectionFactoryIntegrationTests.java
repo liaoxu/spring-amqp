@@ -3,11 +3,8 @@ package org.springframework.amqp.rabbit.connection;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -18,7 +15,6 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.core.ChannelCallback;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.test.BrokerRunning;
 import org.springframework.amqp.rabbit.test.BrokerTestUtils;
 
 import com.rabbitmq.client.Channel;
@@ -26,21 +22,21 @@ import com.rabbitmq.client.DefaultConsumer;
 
 public class CachingConnectionFactoryIntegrationTests {
 
-	private static Log logger = LogFactory
-			.getLog(CachingConnectionFactoryIntegrationTests.class);
+	// private static Log logger = LogFactory
+	// .getLog(CachingConnectionFactoryIntegrationTests.class);
 
 	private CachingConnectionFactory connectionFactory = new CachingConnectionFactory(
-			"localhost");
+			"localhost", BrokerTestUtils.getPort());
 
-	@Rule
-	public BrokerRunning brokerIsRunning = BrokerRunning.isRunning();
+	// @Rule
+	// public BrokerRunning brokerIsRunning = BrokerRunning.isRunning();
 
 	@Rule
 	public ExpectedException exception = ExpectedException.none();
 
 	@Before
 	public void open() {
-		connectionFactory.setPort(BrokerTestUtils.getPort());
+		// connectionFactory.setPort(BrokerTestUtils.getPort());
 	}
 
 	@After
@@ -168,7 +164,7 @@ public class CachingConnectionFactoryIntegrationTests {
 		admin.declareQueue(queue);
 		final String route = queue.getName();
 
-		final CountDownLatch latch = new CountDownLatch(1);
+		// final CountDownLatch latch = new CountDownLatch(1);
 		try {
 			template.execute(new ChannelCallback<Object>() {
 				public Object doInRabbit(Channel channel) throws Exception {

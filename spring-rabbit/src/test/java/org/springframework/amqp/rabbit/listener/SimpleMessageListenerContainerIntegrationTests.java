@@ -12,14 +12,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.log4j.Level;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.springframework.amqp.ShouldRetryLocallyException;
 import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageListener;
@@ -29,9 +28,7 @@ import org.springframework.amqp.rabbit.core.ChannelAwareMessageListener;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.listener.adapter.MessageListenerAdapter;
-import org.springframework.amqp.rabbit.test.BrokerRunning;
 import org.springframework.amqp.rabbit.test.BrokerTestUtils;
-import org.springframework.amqp.rabbit.test.Log4jLevelAdjuster;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.AbstractPlatformTransactionManager;
@@ -56,18 +53,18 @@ public class SimpleMessageListenerContainerIntegrationTests {
 	private final CachingConnectionFactory connectionFactory = new CachingConnectionFactory(
 			"localhost", BrokerTestUtils.DEFAULT_PORT);
 
-	@Rule
-	public Log4jLevelAdjuster logLevels = new Log4jLevelAdjuster(Level.OFF,
-			RabbitTemplate.class, SimpleMessageListenerContainer.class,
-			BlockingQueueConsumer.class, CachingConnectionFactory.class);
+	// @Rule
+	// public Log4jLevelAdjuster logLevels = new Log4jLevelAdjuster(Level.OFF,
+	// RabbitTemplate.class, SimpleMessageListenerContainer.class,
+	// BlockingQueueConsumer.class, CachingConnectionFactory.class);
 
-	@Rule
-	public Log4jLevelAdjuster testLogLevels = new Log4jLevelAdjuster(
-			Level.DEBUG, SimpleMessageListenerContainerIntegrationTests.class);
+	// @Rule
+	// public Log4jLevelAdjuster testLogLevels = new Log4jLevelAdjuster(
+	// Level.DEBUG, SimpleMessageListenerContainerIntegrationTests.class);
 
-	@Rule
-	public BrokerRunning brokerIsRunning = BrokerRunning
-			.isRunningWithEmptyQueues(queue);
+	// @Rule
+	// public BrokerRunning brokerIsRunning = BrokerRunning
+	// .isRunningWithEmptyQueues(queue);
 
 	private final int messageCount;
 
@@ -92,19 +89,23 @@ public class SimpleMessageListenerContainerIntegrationTests {
 
 	@Parameters
 	public static List<Object[]> getParameters() {
+		// return Arrays.asList( //
+		// params(0, 1, 1, AcknowledgeMode.AUTO), //
+		// params(1, 1, 1, AcknowledgeMode.NONE), //
+		// params(2, 4, 1, AcknowledgeMode.AUTO), //
+		// extern(3, 4, 1, AcknowledgeMode.AUTO), //
+		// params(4, 4, 1, AcknowledgeMode.AUTO, false), //
+		// params(5, 2, 2, AcknowledgeMode.AUTO), //
+		// params(6, 2, 2, AcknowledgeMode.NONE), //
+		// params(7, 20, 4, AcknowledgeMode.AUTO), //
+		// params(8, 20, 4, AcknowledgeMode.NONE), //
+		// params(9, 300, 4, AcknowledgeMode.AUTO), //
+		// params(10, 300, 4, AcknowledgeMode.NONE), //
+		// params(11, 300, 4, AcknowledgeMode.AUTO, 10) //
+		// );
 		return Arrays.asList( //
 				params(0, 1, 1, AcknowledgeMode.AUTO), //
-				params(1, 1, 1, AcknowledgeMode.NONE), //
-				params(2, 4, 1, AcknowledgeMode.AUTO), //
-				extern(3, 4, 1, AcknowledgeMode.AUTO), //
-				params(4, 4, 1, AcknowledgeMode.AUTO, false), //
-				params(5, 2, 2, AcknowledgeMode.AUTO), //
-				params(6, 2, 2, AcknowledgeMode.NONE), //
-				params(7, 20, 4, AcknowledgeMode.AUTO), //
-				params(8, 20, 4, AcknowledgeMode.NONE), //
-				params(9, 300, 4, AcknowledgeMode.AUTO), //
-				params(10, 300, 4, AcknowledgeMode.NONE), //
-				params(11, 300, 4, AcknowledgeMode.AUTO, 10) //
+				params(1, 1, 1, AcknowledgeMode.NONE) //
 				);
 	}
 
@@ -200,6 +201,13 @@ public class SimpleMessageListenerContainerIntegrationTests {
 				new ChannelAwareListener(latch, true));
 	}
 
+	@Test
+	public void testListenerWithDelibrateException() throws Exception {
+		CountDownLatch latch = new CountDownLatch(messageCount);
+		doListenerWithDelebrateExceptionTest(latch, new DelibrateFailListener(
+				latch));
+	}
+
 	private void doSunnyDayTest(CountDownLatch latch, Object listener)
 			throws Exception {
 		container = createContainer(listener);
@@ -241,6 +249,30 @@ public class SimpleMessageListenerContainerIntegrationTests {
 		} else {
 			assertNull(template.receiveAndConvert(queue.getName()));
 		}
+	}
+
+	private void doListenerWithDelebrateExceptionTest(CountDownLatch latch,
+			DelibrateFailListener listener) throws Exception {
+		container = createContainer(listener);
+		for (int i = 0; i < messageCount; i++) {
+			template.convertAndSend(queue.getName(), i + "foo");
+		}
+		try {
+			boolean waited = latch.await(5 + Math.max(1, messageCount / 10),
+					TimeUnit.SECONDS);
+			assertTrue("Timed out waiting for message", waited);
+		} finally {
+			// Wait for broker communication to finish before trying to stop
+			// container
+			Thread.sleep(300L);
+			container.shutdown();
+			Thread.sleep(300L);
+		}
+		assertTrue("Not equal total retry times, expected " + messageCount
+				* SimpleMessageListenerContainer.DEFAULT_REQUE_TIMES
+				+ ", actually " + listener.getCount(),
+				listener.getCount() == messageCount
+						* SimpleMessageListenerContainer.DEFAULT_REQUE_TIMES);
 	}
 
 	private SimpleMessageListenerContainer createContainer(Object listener) {
@@ -322,6 +354,36 @@ public class SimpleMessageListenerContainerIntegrationTests {
 			} finally {
 				latch.countDown();
 			}
+		}
+	}
+
+	public static class DelibrateFailListener implements MessageListener {
+		private AtomicInteger count = new AtomicInteger();
+
+		private final CountDownLatch latch;
+
+		public DelibrateFailListener(CountDownLatch latch) {
+			this.latch = latch;
+		}
+
+		@Override
+		public void onMessage(Message message) {
+			String value = new String(message.getBody());
+			try {
+				logger.info("get message "
+						+ message.getMessageProperties().getDeliveryTag());
+				int counter = count.getAndIncrement();
+				if (logger.isDebugEnabled() && counter % 100 == 0) {
+					logger.debug(value + counter);
+				}
+				throw new ShouldRetryLocallyException("Delibrate failure");
+			} finally {
+				latch.countDown();
+			}
+		}
+
+		public int getCount() {
+			return count.get();
 		}
 	}
 
