@@ -514,7 +514,6 @@ public class SimpleMessageListenerContainer extends
 
 	private boolean doReceiveAndExecute(BlockingQueueConsumer consumer)
 			throws Throwable {
-
 		Channel channel = consumer.getChannel();
 
 		for (int i = 0; i < txSize; i++) {

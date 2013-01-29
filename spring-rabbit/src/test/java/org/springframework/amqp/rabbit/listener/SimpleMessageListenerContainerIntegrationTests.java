@@ -370,13 +370,17 @@ public class SimpleMessageListenerContainerIntegrationTests {
 		public void onMessage(Message message) {
 			String value = new String(message.getBody());
 			try {
-				logger.info("get message "
-						+ message.getMessageProperties().getDeliveryTag());
-				int counter = count.getAndIncrement();
+				if (logger.isDebugEnabled()) {
+					logger.debug("get message "
+							+ message.getMessageProperties().getDeliveryTag());
+				}
+				int counter = count.incrementAndGet();
 				if (logger.isDebugEnabled() && counter % 100 == 0) {
 					logger.debug(value + counter);
 				}
-				throw new ShouldRetryLocallyException("Delibrate failure");
+				if (counter != SimpleMessageListenerContainer.DEFAULT_REQUE_TIMES) {
+					throw new ShouldRetryLocallyException("Delibrate failure");
+				}
 			} finally {
 				latch.countDown();
 			}
